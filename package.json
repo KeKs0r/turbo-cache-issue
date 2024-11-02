@@ -6,6 +6,13 @@
     "apps/*",
     "packages/*"
   ],
+  "scripts": {
+    "clean": "bun run clean:root && bun run clean:app-a && bun run clean:pkg-a && bun run clean:pkg-b",
+    "clean:root": "rm -rf .turbo",
+    "clean:app-a": "rm -rf apps/app-a/.turbo",
+    "clean:pkg-a": "rm -rf packages/pkg-a/.turbo",
+    "clean:pkg-b": "rm -rf packages/pkg-b/.turbo"
+  },
   "devDependencies": {
     "turbo": "^2.2.3"
   }

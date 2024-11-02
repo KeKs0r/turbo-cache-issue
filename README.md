@@ -1,42 +1,142 @@
-# Turborepo starter with shell commands
+# App task cached, although dependant package changed
 
-This is an official starter Turborepo meant for debugging, learning, and exploring.
+For the reproduction of the issue, we have a simple `app-a` that depends on `pkg-a`.
+There is also some test for `app-a` that checks if the app works as expected.
 
-## Using this example
+Hint: there is a command to reset the turbo cache: `bun run clean`
 
-Run the following command:
+### Setup
 
-```sh
-npx create-turbo@latest -e with-shell-commands
+```bash
+bun install
 ```
 
-### For bug reproductions
+### Running (before changes to populate cache)
 
-Giving the Turborepo core team a minimal reproduction is the best way to create a tight feedback loop for a bug you'd like to report.
+```bash
+turbo run test
+```
 
-Because most monorepos will rely on more tooling than Turborepo (frameworks, linters, formatters, etc.), it's often useful for us to have a reproduction that strips away all of this other tooling so we can focus _only_ on Turborepo's role in your repo. This example does exactly that, giving you a good starting point for creating a reproduction.
+Output:
 
-- Feel free to rename/delete packages for your reproduction so that you can be confident it most closely matches your use case.
-- If you need to use a different package manager to produce your bug, run `npx @turbo/workspaces convert` to switch package managers.
-- It's possible that your bug really **does** have to do with the interaction of Turborepo and other tooling within your repository. If you find that your bug does not reproduce in this minimal example and you're confident Turborepo is still at fault, feel free to bring that other tooling into your reproduction.
+```
+turbo 2.2.3
 
-## What's inside?
+• Packages in scope: app-a, app-b, pkg-a, pkg-b, tooling-config
+• Running test in 5 packages
+• Remote caching disabled
+app-a:test: cache miss, executing bb473beea6ee1e4a
+pkg-b:test: cache miss, executing 924534894e7e4b4a
+pkg-a:test: cache miss, executing 95c34800d9103775
+app-a:test:
+pkg-a:test:
+pkg-b:test:
+pkg-a:test: $ echo "Tested!"
+app-a:test: $ bun test
+pkg-b:test: $ echo "Tested!"
+pkg-a:test: Tested!
+pkg-b:test: Tested!
+app-a:test: bun test v1.1.34-canary.5 (9621b641)
+app-a:test:
+app-a:test: index.spec.js:
+app-a:test: ✓ Test App-A [0.11ms]
+app-a:test:
+app-a:test:  1 pass
+app-a:test:  0 fail
+app-a:test:  1 expect() calls
+app-a:test: Ran 1 tests across 1 files. [6.00ms]
 
-This Turborepo includes the following packages:
+ Tasks:    3 successful, 3 total
+Cached:    0 cached, 3 total
+  Time:    79ms
+```
 
-### Apps and Packages
+When now rerunning `turbo run test` we have a full turbo cache hit.
 
-- `app-a`: A final package that depends on all other packages in the graph and has no dependents. This could resemble an application in your monorepo that consumes everything in your monorepo through its topological tree.
-- `app-b`: Another final package with many dependencies. No dependents, lots of dependencies.
-- `pkg-a`: A package that has all scripts in the root `package.json`.
-- `pkg-b`: A package with _almost_ all scripts in the root `package.json`.
-- `tooling-config`: A package to simulate a common configuration used for all of your repository. This could resemble a configuration for tools like TypeScript or ESLint that are installed into all of your packages.
+```
+ Tasks:    3 successful, 3 total
+Cached:    3 cached, 3 total
+  Time:    66ms >>> FULL TURBO
+```
 
-### Some scripts to try
+### Changing `pkg-a`
 
-If you haven't yet, [install global `turbo`](https://turbo.build/repo/docs/installing#install-globally) to run tasks.
+We now work happily in our monorepo and change something in our pkg-a
 
-- `turbo build lint typecheck`: Runs all tasks in the default graph.
-- `turbo build`: A basic command to build `app-a` and `app-b` in parallel.
-- `turbo build --filter=app-a`: Building only `app-a` and its dependencies.
-- `turbo lint`: A basic command for running lints in all packages in parallel.
+```js
+// packages/pkg-a/index.js
+export function calculatepkgA() {
+  return "pkg-a-changed";
+}
+```
+
+We know we have good testcases so, we push this change to CI and let it run the tests.
+
+```bash
+turbo run test
+```
+
+Output:
+
+```
+➜  with-shell-commands git:(main) ✗ bun turbo test
+turbo 2.2.3
+
+• Packages in scope: app-a, app-b, pkg-a, pkg-b, tooling-config
+• Running test in 5 packages
+• Remote caching disabled
+app-a:test: cache hit (outputs already on disk), replaying logs bb473beea6ee1e4a
+pkg-b:test: cache hit (outputs already on disk), replaying logs 924534894e7e4b4a
+pkg-a:test: cache miss, executing 5aedbf401a0ab566
+app-a:test:
+app-a:test: $ bun test
+app-a:test: bun test v1.1.34-canary.5 (9621b641)
+app-a:test:
+app-a:test: index.spec.js:
+app-a:test: ✓ Test App-A [0.11ms]
+app-a:test:
+app-a:test:  1 pass
+app-a:test:  0 fail
+app-a:test:  1 expect() calls
+app-a:test: Ran 1 tests across 1 files. [6.00ms]
+pkg-b:test:
+pkg-b:test: $ echo "Tested!"
+pkg-b:test: Tested!
+pkg-a:test:
+pkg-a:test: $ echo "Tested!"
+pkg-a:test: Tested!
+
+ Tasks:    3 successful, 3 total
+Cached:    2 cached, 3 total
+  Time:    60ms
+```
+
+Awesome, everything works and we can deploy to production......
+This is a false sense of safety, since when running the tests for `app-a`, we see that they are failing:
+
+```
+bun test v1.1.34-canary.5 (9621b641)
+
+index.spec.js:
+1 | import { it, expect } from "bun:test";
+2 | import { doSomething } from "./util.js";
+3 |
+4 | it("Test App-A", () => {
+5 |   const result = doSomething();
+6 |   expect(result).toBe("pkg-a mixed");
+                     ^
+error: expect(received).toBe(expected)
+
+Expected: "pkg-a mixed"
+Received: "pkg-a-changed mixed"
+
+      at /Users/marc/Workspace/with-shell-commands/apps/app-a/index.spec.js:6:18
+✗ Test App-A [3.28ms]
+
+ 0 pass
+ 1 fail
+ 1 expect() calls
+Ran 1 tests across 1 files. [64.00ms]
+```
+
+Our turbo run for the tests for `app-a` are cached, no hash input changed, so they were not rerun. Preventing us from catching the bug.
