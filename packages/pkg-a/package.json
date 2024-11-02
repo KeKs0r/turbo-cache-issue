@@ -1,9 +1,11 @@
 {
   "name": "pkg-a",
+  "main": "./index.js",
   "scripts": {
     "build": "echo \"Building at the speed of Turbo.\" > output-file.txt && cat output-file.txt",
     "lint": "echo \"Linted!\"",
-    "type-check": "echo \"Types checked!\""
+    "type-check": "echo \"Types checked!\"",
+    "test": "echo \"Tested!\""
   },
   "dependencies": {
     "tooling-config": "workspace:*"
